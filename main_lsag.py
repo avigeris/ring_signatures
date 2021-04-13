@@ -1,6 +1,7 @@
 import os
 import hashlib
 import functools
+import time
 
 import ec
 from util import randrange
@@ -36,7 +37,6 @@ def sign(siging_key, key_idx, M, y, G=SECP256k1.generator(), hash_func=hashlib.s
 
 def verify(message, y, c_0, s, Y, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
     n = len(y)
-    print("c_0 = ", c_0)
     c = [c_0] + [0] * (n - 1)
 
     h = H2(y, hash_func=hash_func)
@@ -53,7 +53,6 @@ def verify(message, y, c_0, s, Y, G=SECP256k1.generator(), hash_func=hashlib.sha
     return False
 
 def H(msg, hash_func=hashlib.sha3_256):
-    print('String = ', ' hash = ', int('0x'+ hash_func(concat(msg)).hexdigest(), 16))
     return int('0x'+ hash_func(concat(msg)).hexdigest(), 16)
 
 def map_to_curve(x, P=SECP256k1.p()):
@@ -168,7 +167,6 @@ def import_public_keys(folder_name='./data', file_name='/publics.txt'):
         line = f.readline()
         while line:
             point = line.rstrip().split(";")
-            print((point[1]))
             keys.append(Point(SECP256k1.p(), SECP256k1.a(), SECP256k1.b(), int(point[0]), int(point[1])))
             line = f.readline()
         return keys
@@ -178,7 +176,6 @@ def import_public_key(number, folder_name='./data'):
     with open(folder_name + file_name) as f:
         line = f.readline()
         point = line.rstrip().split(";")
-        print(point[0])
         return Point(SECP256k1.p(), SECP256k1.a(), SECP256k1.b(), int(point[0]), int(point[1]))
 
 def import_private_keys(folder_name='./data', file_name='/secrets.txt'):
@@ -197,18 +194,26 @@ def import_private_key(number, folder_name='./data'):
         return int(line.rstrip())
 
 def generate_keys_and_test(number_participants, i, message):
-
+    start = time.time()
     x = [randrange(SECP256k1.order()) for i in range(number_participants)]
-
     y = list(map(lambda xi: SECP256k1.generator() * xi, x))
+    end = time.time()
+    print("Keys generation: ", end - start)
 
+    start = time.time()
     signature = sign(x[i], i, message, y)
+    end = time.time()
+    print("Signature generation: ", end - start)
 
     export_public_key(y[i], i)
     export_public_keys(y)
     export_private_key(x[i], i)
     export_private_keys(x)
+
+    start = time.time()
     assert(verify(message, y, *signature))
+    end = time.time()
+    print("Signature verification: ", end - start)
 
 def import_keys_and_test(number_participants, i, message):
     y = import_public_keys()

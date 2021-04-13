@@ -1,6 +1,7 @@
 import os
 import hashlib
 import functools
+import time
 
 import ec
 from util import randrange
@@ -8,14 +9,12 @@ from ec import SECP256k1
 from point import Point
 import numbertheory
 
-def s(singing_key, key_idx, M, y, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
+def sign(singing_key, key_idx, M, y, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
     prime_field = SECP256k1.order()
     key_image = singing_key * H2(y[key_idx])
     # Ring signature parameters
     n_keys = len(y)
     random_numbers = [randrange(prime_field) for i in range(n_keys)]
-    for i in range(len(random_numbers)):
-        print(random_numbers[i])
     alpha = randrange(prime_field)
     L = [0] * n_keys
     R = [0] * n_keys
@@ -40,7 +39,7 @@ def s(singing_key, key_idx, M, y, G=SECP256k1.generator(), hash_func=hashlib.sha
 
     return y, key_image, c[0], random_numbers
 
-def v(message, y, key_image, seed, random_numbers, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
+def verification(message, y, key_image, seed, random_numbers, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
     # Ring signature parameters
     n_keys = len(y)
     L = [0] * n_keys
@@ -57,56 +56,11 @@ def v(message, y, key_image, seed, random_numbers, G=SECP256k1.generator(), hash
     i = 1
     while i < n_keys:
         L[i] = random_numbers[i] * G + c[i] * y[i]
-        print('here', random_numbers[i])
-        print(H2(y[i]))
         R[i] = random_numbers[i] * H2(y[i]) + c[i] * key_image
         c[((i + 1) % n_keys)] = H([message, L[i], R[i]], hash_func=hash_func)
         i = i + 1
 
-    # Compute final element
-    print(seed)
-    print(c[0])
     return seed == c[0]
-
-def sign(siging_key, key_idx, M, y, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
-    n = len(y)
-    c = [0] * n
-    s = [0] * n
-
-    # STEP 1
-
-    # STEP 2
-    u = randrange(SECP256k1.order())
-    c[(key_idx + 1) % n] = H([y, M, G * u], hash_func=hash_func)
-
-    # STEP 3
-    for i in [ i for i in range(key_idx + 1, n) ] + [i for i in range(key_idx)]:
-
-        s[i] = randrange(SECP256k1.order())
-
-        z_1 = (G * s[i]) + (y[i] * c[i])
-
-        c[(i + 1) % n] = H([y, M, z_1], hash_func=hash_func)
-
-    # STEP 4
-    print('u ' + str(type(u)))
-    s[key_idx] = (u - siging_key * c[key_idx]) % SECP256k1.order()
-    return (c[0], s)
-
-def verify(message, y, c_0, s, G=SECP256k1.generator(), hash_func=hashlib.sha3_256):
-    n = len(y)
-    print("c_0 = ", c_0)
-    c = [c_0] + [0] * (n - 1)
-
-    for i in range(n):
-        z_1 = (G * s[i]) + (y[i] * c[i])
-
-        if i < n - 1:
-            c[i + 1] = H([y, message, z_1], hash_func=hash_func)
-        else:
-            return c_0 == H([y, message, z_1], hash_func=hash_func)
-
-    return False
 
 def map_to_curve(x, P=SECP256k1.p()):
     x -= 1
@@ -126,7 +80,6 @@ def map_to_curve(x, P=SECP256k1.p()):
     return Point(SECP256k1.p(), SECP256k1.a(), SECP256k1.b(), x, y)
 
 def H(msg, hash_func=hashlib.sha3_256):
-    print('String = ', ' hash = ', int('0x'+ hash_func(concat(msg)).hexdigest(), 16))
     return int('0x'+ hash_func(concat(msg)).hexdigest(), 16)
 
 def H2(msg, hash_func=hashlib.sha3_256):
@@ -225,7 +178,6 @@ def import_public_keys(folder_name='./data', file_name='/publics.txt'):
         line = f.readline()
         while line:
             point = line.rstrip().split(";")
-            print((point[1]))
             keys.append(Point(SECP256k1.p(), SECP256k1.a(), SECP256k1.b(), int(point[0]), int(point[1])))
             line = f.readline()
         return keys
@@ -235,7 +187,6 @@ def import_public_key(number, folder_name='./data'):
     with open(folder_name + file_name) as f:
         line = f.readline()
         point = line.rstrip().split(";")
-        print(point[0])
         return Point(SECP256k1.p(), SECP256k1.a(), SECP256k1.b(), int(point[0]), int(point[1]))
 
 def import_private_keys(folder_name='./data', file_name='/secrets.txt'):
@@ -255,42 +206,41 @@ def import_private_key(number, folder_name='./data'):
 
 def generate_keys_and_test(number_participants, i, message):
 
+    start = time.time()
     x = [randrange(SECP256k1.order()) for i in range(number_participants)]
-
     y = list(map(lambda xi: SECP256k1.generator() * xi, x))
+    end = time.time()
+    print("Keys generation: ", end - start)
 
-    z = [randrange(SECP256k1.order()) for i in range(number_participants)]
+    start = time.time()
+    keys, key_image, seed, random_numbers = sign(x[i], i, message, y)
+    end = time.time()
+    print("Signature generation: ", end - start)
 
-    j = list(map(lambda zi: SECP256k1.generator() * zi, z))
-
-    signature = sign(x[i], i, message, y)
+    start = time.time()
+    verify = verification(message, keys, key_image, seed, random_numbers)
+    end = time.time()
+    print("Signature verification: ", end - start)
 
     export_public_key(y[i], i)
     export_public_keys(y)
     export_private_key(x[i], i)
     export_private_keys(x)
-    assert(verify(message, y, *signature))
+    assert(verify)
 
 def import_keys_and_test(number_participants, i, message):
     y = import_public_keys()
     x = import_private_key(i)
-    signature = sign(x, i, message, y)
-    assert(verify(message, y, *signature))
+    keys, key_image, seed, random_numbers = sign(x, i, message, y)
+    verify = verification(message, keys, key_image, seed, random_numbers)
+    assert(verify)
 
 def main():
     number_participants = 10
     i = 2
     message = "can we talk again"
-    x = [randrange(SECP256k1.order()) for i in range(number_participants)]
-
-    y = list(map(lambda xi: SECP256k1.generator() * xi, x))
-    keys, key_image, seed, random_numbers = s(x[i], i, message, y)
-    print(random_numbers)
-    verification = v(message, keys, key_image, seed, random_numbers)
-    print(verification)
-    #generate_keys_and_test(number_participants, i, message)
-    #import_keys_and_test(number_participants, i, message)
-
+    generate_keys_and_test(number_participants, i, message)
+    import_keys_and_test(number_participants, i, message)
 
 if __name__ == '__main__':
     main()
