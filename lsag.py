@@ -105,8 +105,7 @@ def point_to_string(p):
 def export_signature(y, message, signature, folder_name='./data', file_name='signature.txt'):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-
-    arch = open(os.path.join(folder_name, file_name), 'w')
+    arch = open(folder_name + "/" + file_name, 'w')
     S = ''.join(map(lambda x: str(x) + ';', signature[1]))[:-1]
     Y = point_to_string(signature[2])
 
@@ -123,8 +122,10 @@ def export_signature(y, message, signature, folder_name='./data', file_name='sig
     arch.write(data)
     arch.close()
 
-def import_signature(folder_name='./data/', file_name='signature.txt'):
-    with open(folder_name + file_name) as f:
+def import_signature(path='./data/signature.txt'):
+    print(path)
+    assert (os.path.exists(path))
+    with open(path) as f:
         signature = []
 
         line = f.readline()
@@ -141,10 +142,11 @@ def import_signature(folder_name='./data/', file_name='signature.txt'):
         line = f.readline()
         return signature
 
-def export_public_keys(p_keys, folder_name='./data', file_name='publics.txt'):
+def export_public_keys(p_keys, folder_name='./data'):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
 
+    file_name = 'publics.txt'
     arch = open(os.path.join(folder_name, file_name), 'w')
 
     for key in p_keys:
@@ -162,14 +164,14 @@ def export_public_key(p_key, number, foler_name='./data'):
 
     arch.close()
 
-def export_private_keys(s_keys, folder_name='./data', file_name='secrets.txt'):
+def export_private_keys(s_keys, folder_name='./data'):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-
-    arch = open(os.path.join(folder_name, file_name), 'w')
-
+    i = 0
     for key in s_keys:
+        arch = open(os.path.join(folder_name, 'secret' + str(i) + '.txt'), 'w')
         arch.write('{}\n'.format(key))
+        i = i + 1
 
     arch.close()
 
@@ -184,6 +186,7 @@ def export_private_key(s_key, number, foler_name='./data'):
     arch.close()
 
 def import_public_keys(path='./data/publics.txt'):
+    assert(os.path.exists(path))
     with open(path) as f:
         keys = []
         line = f.readline()
@@ -200,36 +203,40 @@ def import_public_key(number, folder_name='./data'):
         point = line.rstrip().split(";")
         return Point(curve.p(), curve.a(), curve.b(), int(point[0]), int(point[1]))
 
-def import_private_key(number, path='./data/secret.txt'):
-    with open(path) as f:
+def import_private_key(number, path='./data', fullpath=None):
+    if fullpath == None:
+        filename = '/secret'+  str(number) + '.txt'
+        fullpath = path+filename
+    assert(os.path.exists(fullpath))
+    with open(fullpath) as f:
         line = f.readline()
         return int(line.rstrip())
 
-def generate_keys(number_participants, i):
+def generate_keys(number_participants):
     start = time.time()
     x = [randrange(curve.order()) for i in range(number_participants)]
     y = list(map(lambda xi: curve.generator() * xi, x))
+    export_private_keys(x)
     end = time.time()
     print("Keys generation: ", end - start)
-    return x[i], y
+    return x, y
 
 def generate_keys_and_test(number_participants, i, message):
-    x, y = generate_keys(number_participants, i)
+    x, y = generate_keys(number_participants)
 
     start = time.time()
-    signature = sign(x, i, message, y)
+    signature = sign(x[i], i, message, y)
     end = time.time()
     print("Signature generation: ", end - start)
-    s = import_signature()
     assert (verify(message, y, *signature))
     message1 = "hi im sleepy"
-    signature1 = sign(x, i, message1, y)
+    signature1 = sign(x[i], i, message1, y)
     print(point_to_string(signature[2]))
     print(point_to_string(signature1[2]))
     export_public_key(y[i], i)
     export_public_keys(y)
-    export_private_key(x, i)
-    export_private_key(x, i)
+    export_private_key(x[i], i)
+    export_private_key(x[i], i)
 
     start = time.time()
     assert(verify(message, y, *signature))
@@ -248,7 +255,6 @@ def main():
     message = "can we talk again"
     generate_keys_and_test(number_participants, i, message)
     import_keys_and_test(number_participants, i, message)
-    import_signature()
 
 if __name__ == '__main__':
     main()
